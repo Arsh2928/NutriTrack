@@ -1,0 +1,19 @@
+---
+title: "State 2 - Per-provider circuit breaker (ai/circuit_breaker.py)"
+---
+stateDiagram-v2
+    [*] --> closed : one breaker each for gemini and groq
+    closed --> closed : failure below threshold (default 3), or success resets count
+    closed --> open : threshold reached, or trip immediately (quota, config error, DNS or offline)
+    open --> half_open : cooldown elapsed (default 60 s), never for config errors
+    half_open --> half_open : only one probe at a time (probe_in_flight)
+    half_open --> closed : probe succeeds (record_success)
+    half_open --> open : probe fails (reopens at once)
+    open --> closed : manual Retry Connection (reset)
+    half_open --> closed : manual Retry Connection (reset)
+
+    note right of open
+        allow_request returns false while open.
+        A config error (401, 403, 404 model)
+        stays open until reset or a fixed key.
+    end note

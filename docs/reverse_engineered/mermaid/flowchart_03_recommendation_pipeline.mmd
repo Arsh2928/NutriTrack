@@ -1,0 +1,25 @@
+---
+title: "Flowchart 3 — 4-Step Meal Recommendation & Validation Pipeline (tools/recommendation_tools.py)"
+---
+flowchart TD
+    Start(["Meal Recommendation Request<br/>(Chat or POST /api/nutritrack/recommendations)"]) --> Step1["Step 1: get_recommendation_candidates(ctx, diet, avoid, prefer)"]
+    Step1 --> ReadRem["Read remaining_calories (rc) & remaining_protein (rp)<br/>from NutritionState (or explicit hypothetical override)"]
+    ReadRem --> HasTarget{"rc is None?"}
+    HasTarget -->|"Yes"| FailNoTarget(["Return fail('no_target', needs_user_input=True)"])
+    HasTarget -->|"No"| HasBudget{"rc <= 0?"}
+    HasBudget -->|"Yes"| OutNoBudget(["Return ok(code='no_budget_left', candidates=[])"])
+
+    HasBudget -->|"rc > 0"| BuildRoles["Compute min_kcal = max(80, 0.35 * min(rc, 600))<br/>_options_by_role(diet, avoid, rc):<br/>Filter get_food_db(user_id) by diet_allows() & avoid list<br/>Expand portion LADDERS where item calories <= rc"]
+    BuildRoles --> GenCombos["Generate Cartesian products across 12 TEMPLATES:<br/>(protein), (protein+carb), (protein+veg), (protein+carb+veg),<br/>(legume+carb), (dairy+fruit), (other/custom), etc.<br/>Keep combinations with min_kcal <= kcal <= rc"]
+    GenCombos -->PrelimScore["Score each combo via _score(meal, rc, rp, prefer)<br/>Diversify via _diverse(MAX_PER_MAIN_FOOD=4)<br/>Reserve up to MAX_OWN_FOODS=5 user custom foods<br/>Store in ephemeral ctx.state.pool['candidates'] as c01..c35"]
+
+    PrelimScore --> HasCands{"Any candidates?"}
+    HasCands -->|"No"| OutNoCands(["Return ok(code='no_candidates', candidates=[])"])
+    HasCands -->|"Yes"| Step2["Step 2: estimate_meal_nutrition(ctx, candidate_ids)<br/>Recompute calories, protein, carbs, fat from DB via _recalculate()"]
+
+    Step2 --> Step3["Step 3: rank_meal_candidates(ctx, top_n=5)<br/>Compute weighted score:<br/>• 0.50 * protein_score (meal protein vs proportional protein_share)<br/>• 0.25 * calorie_fill (1 - |meal_kcal - min(rc,600)| / min(rc,600))<br/>• 0.15 * variety (1.0 for 2+ foods, 0.6 for single food)<br/>• 0.10 * preference (1.0 if any item in prefer list)<br/>Apply _diverse() & attach human-readable _reason()"]
+
+    Step3 --> Step4["Step 4: validate_recommendation_fit(ctx, candidate_id)<br/>Re-resolve items from scratch against DB<br/>Verify |stored_estimate - fresh_meal| <= 0.05<br/>Verify fresh_meal.calories <= remaining_calories"]
+    Step4 --> FitOK{"Valid fit?"}
+    FitOK -->|"No"| FailFit(["Return fail('invalid_recommendation', issues)"])
+    FitOK -->|"Yes"| SaveRecs(["Append to pool['validated'] & persist via<br/>ctx.state.set_recommendations() into data/users/<user_id>.json"])

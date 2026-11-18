@@ -1,0 +1,47 @@
+---
+title: "Flowchart 2 — Information Retrieval (IR) & Food Nutrition Resolution Algorithm"
+---
+flowchart TD
+    In(["resolve_item(food_text, quantity, unit, household_unit, user_id)"]) --> EmptyChk{"food_text empty?"}
+    EmptyChk -->|"Yes"| FailEmpty(["Return _fail('no_food_name')"])
+    EmptyChk -->|"No"| UnitChk{"unit provided?"}
+
+    UnitChk -->|"Yes"| NormUnit["Lookup UNIT_ALIASES[unit.lower()]"]
+    NormUnit --> ValidUnit{"Known unit alias?"}
+    ValidUnit -->|"No"| FailUnit(["Return _fail('unsupported_unit')"])
+    ValidUnit -->|"Yes"| QtyChk
+    UnitChk -->|"No"| QtyChk{"quantity provided?"}
+
+    QtyChk -->|"Yes"| ParseFloat["Validate finite float & plausibility_problem()<br/>(Rejects <= 0, > 50 count, > 5000 g/ml)"]
+    ParseFloat --> PlausOK{"Plausible?"}
+    PlausOK -->|"No"| FailQty(["Return _fail('invalid_quantity' / 'implausible_quantity')"])
+    PlausOK -->|"Yes"| LoadDB
+    QtyChk -->|"No"| LoadDB["db = get_food_db(user_id)<br/>Merge _BUILTIN_DB + user's custom_foods/<user_id>.json"]
+
+    LoadDB --> BlockedChk{"Query matches<br/>_NOT_SAME_AS phrase?"}
+    BlockedChk -->|"Yes (e.g. 'paneer tikka')"| SetBlocked["details.key = None<br/>details.blocked_by = phrase"]
+    BlockedChk -->|"No"| BuildVocab["Tokenize query -> qwords<br/>Build exact_vocab from all DB keys & aliases"]
+
+    BuildVocab --> ScanAliases["Iterate all (key, entry) in db and alias in entry.aliases<br/>For each alias word w: _matched_query_word(w, qwords, exact_vocab)<br/>1. w in qwords -> exact match<br/>2. len >= 4, q[0] == w[0], q not in exact_vocab, SequenceMatcher >= 0.80 -> fuzzy match"]
+    ScanAliases --> BestScore["Select alias maximizing score = (len(awords), len(alias))<br/>Compute leftover_words = qwords - best_matched - FILLER_WORDS - digits"]
+
+    SetBlocked & BestScore --> NeedsExt{"(key is None OR leftover_words)<br/>AND allow_external<br/>AND external_enabled()?"}
+    NeedsExt -->|"Yes (NUTRITRACK_ONLINE_LOOKUP=1<br/>& mode != 'offline')"| ExtLookup["lookup_external_food(food_text)<br/>1. Check _CACHE (LRU 500) & _IN_FLIGHT dedup<br/>2. Query USDA FDC (/foods/search, _name_matches)<br/>3. Fallback Open Food Facts (v2 + CGI, reject derivatives)<br/>4. Tag provenance ('usda_fdc' / 'open_food_facts'), never save to disk"]
+    ExtLookup --> ExtFound{"External hit?"}
+    ExtFound -->|"Yes"| BuildExtEntry["Construct per-100g entry + household portions{}<br/>Clear leftover_words"] --> CheckKey
+    ExtFound -->|"No"| CheckKey
+    NeedsExt -->|"No"| CheckKey{"details.key is None?"}
+
+    CheckKey -->|"Yes"| Suggest["did_you_mean(food_text, limit=3)<br/>difflib.get_close_matches(cutoff=0.60)"]
+    Suggest --> FailUnknown(["Return _fail('unknown_food', did_you_mean=suggestions)<br/>Prompts user for label macros to save as custom food"])
+
+    CheckKey -->|"No"| LeftoverGate{"details.leftover_words<br/>non-empty?"}
+    LeftoverGate -->|"Yes"| FailLowConf(["Return _fail('low_confidence_match', closest_match=key)<br/>Refuses to guess branded/prepared variant"])
+
+    LeftoverGate -->|"No (Clean Match)"| ConvertUnit["_convert(entry, name, quantity, unit)<br/>• Resolve household_unit via entry.portions{}<br/>• Piece/slice/scoop vs weight/volume compatibility<br/>• Convert kg->1000g, l->1000ml, cup->240ml, tbsp->15ml, tsp->5ml"]
+    ConvertUnit --> ConvOK{"Conversion succeeded?"}
+    ConvOK -->|"No (missing/ambiguous/mismatch)"| FailConv(["Return _fail('missing_quantity' / 'ambiguous_quantity' / 'unit_mismatch')"])
+
+    ConvOK -->|"Yes (effective_amount)"| PostPlaus{"Post-conversion<br/>plausibility_problem()?"}
+    PostPlaus -->|"Yes"| FailOver(["Return _fail('implausible_quantity')"])
+    PostPlaus -->|"No"| ScaleOut(["Compute scale = effective / entry.base_amount<br/>Return {ok: True, food, quantity_str, calories, protein,<br/>carbs, fat, fiber, provenance, external, notes}"])

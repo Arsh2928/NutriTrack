@@ -1,0 +1,20 @@
+# NutriTrack — CSE476 CA2 Multi-Agent Personalized Nutrition System
+# Install in a Python 3.10+ virtual environment:
+#   python -m pip install -r requirements.txt
+
+# Web framework & HTTP
+Flask>=3.0
+requests>=2.31
+python-dotenv>=1.0
+
+# Microsoft Agent Framework & OpenAI / GitHub Models connector
+agent-framework>=1.26.0
+agent-framework-openai>=1.18.2
+openai>=1.40
+
+# Testing & interactive demonstration notebook
+pytest>=9.0
+jupyter>=1.1
+ipykernel>=7.0
+nbconvert>=7.17
+nbformat>=5.11

@@ -1,0 +1,23 @@
+---
+title: "State 4 - Durable operation (idempotency) lifecycle (state/operations.py)"
+---
+stateDiagram-v2
+    [*] --> processing : begin() with a new request_id, lease token and owner pid written
+    processing --> succeeded : complete(status succeeded), response stored
+    processing --> failed : complete(status failed), error stored
+    processing --> processing : begin() same payload while lease is live, caller gets in_progress and waits up to 3 s
+    succeeded --> succeeded : begin() same payload, caller gets replay with duplicate true
+    failed --> processing : begin() same payload retried, attempts + 1
+    processing --> processing : stale lease and dead worker, retried, attempts + 1
+    succeeded --> [*] : evicted when store exceeds 200 operations
+    failed --> [*] : evicted when store exceeds 200 operations
+
+    note right of processing
+        Any begin() whose payload hash differs from the stored one
+        returns conflict (HTTP 409 idempotency_conflict)
+        and leaves the record unchanged.
+        OPERATION_STATUSES also lists pending, which begin()
+        treats exactly like processing.
+        A corrupt operations file raises OperationStoreCorruptError
+        (HTTP 500) and is never overwritten.
+    end note

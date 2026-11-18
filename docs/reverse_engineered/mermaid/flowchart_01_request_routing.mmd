@@ -1,0 +1,53 @@
+---
+title: "Flowchart 1 — End-to-End HTTP Request, Idempotency, Fast-Path & Multi-Agent Execution"
+---
+flowchart TD
+    Start(["HTTP Request Arrives at Flask Server"]) --> CheckAuth{"_authorize_request()<br/>Valid Session / Loopback?"}
+    CheckAuth -->|"Invalid / Expired Token"| Resp401(["Return HTTP 401 Unauthorized"])
+    CheckAuth -->|"Cookie POST/PUT/DELETE<br/>Missing/Bad X-CSRF-Token"| Resp403CSRF(["Return HTTP 403 csrf_failed"])
+    CheckAuth -->|"Cross-User user_id Mismatch"| Resp403IDOR(["Return HTTP 403 forbidden"])
+
+    CheckAuth -->|"Authorized user_id"| HasReqId{"Has request_id?<br/>(chat / meals / water)"}
+    HasReqId -->|"Yes"| OpBegin["DurableOperationStore.begin()<br/>Compute SHA-256 payload_hash"]
+    OpBegin --> OpAction{"op_action?"}
+    OpAction -->|"conflict (different payload)"| Resp409Conf(["Return HTTP 409 idempotency_conflict"])
+    OpAction -->|"replay (already succeeded)"| RespReplay(["Return Stored HTTP 200 JSON (duplicate=true)"])
+    OpAction -->|"in_progress (live worker lease)"| WaitOp["wait_if_in_progress(timeout=3.0s)"]
+    WaitOp --> SettledChk{"Settled == succeeded?"}
+    SettledChk -->|"Yes"| RespReplay
+    SettledChk -->|"No (still running)"| Resp409Prog(["Return HTTP 409 operation_in_progress"])
+
+    HasReqId -->|"No"| AcquireLock["Acquire _user_lock(user_id)<br/>+ ai_mode_scope(selected_mode)<br/>+ Snapshot _state_analytics_sig()"]
+    OpAction -->|"execute"| AcquireLock
+
+    AcquireLock --> RouteFast{"route_chat_fast(message)<br/>Matches Fast Path?"}
+    RouteFast -->|"Weekly / History / Remaining / Daily Regex"| FastQuery["Execute Deterministic Summary<br/>(_fast_weekly / _fast_history / _fast_remaining / _fast_daily)<br/>< 15 ms, 0 LLM calls"]
+    RouteFast -->|"Starts with remove/delete/undo"| FastRemove["fast_remove_meal()<br/>Match meal_id, batch_id, last, or singularized food tokens"]
+    RouteFast -->|"Has log verb or explicit quantity<br/>& no '?' or complex keyword"| FastLog["fast_log_meal()<br/>split_meal_text -> parse_item_text -> resolve_items -> st.add_meals()"]
+
+    RouteFast -->|"Complex query, '?', goal update,<br/>or meal recommendation"| SemCheck{"Acquire _TURN_INFLIGHT_SEM<br/>(max 16 workers, 0.25s wait)"}
+    SemCheck -->|"Timeout (Server Busy)"| Resp503Busy(["Return HTTP 503 server_busy"])
+    SemCheck -->|"Acquired"| TurnScope["Submit to _TURN_EXECUTOR with<br/>turn_execution_scope(25s) + cancel_event"]
+
+    TurnScope --> MgrStart["NutriTrackOrchestrator.run_turn()<br/>state.reset_run_data() -> update_workflow_status('planning')<br/>-> read_shared_state() -> plan_specialists_for_request()"]
+    MgrStart --> HasSpec{"Specialists Planned?"}
+    HasSpec -->|"Empty (non-food greeting)"| PoliteReply["Log & Return Capabilities Overview"]
+    HasSpec -->|"Yes (Causal Order)"| DelegateLoop["delegate_to_specialist()<br/>1. meal_intake<br/>2. nutrition_analysis<br/>3. goal_budget<br/>4. meal_recommendation"]
+
+    DelegateLoop --> SpecFailChk{"Any Specialist<br/>status == 'failed'?"}
+    SpecFailChk -->|"Yes"| AbortTurn["validate_agent_results() -> append_run_log(failed)<br/>-> update_workflow_status('failed')"]
+    SpecFailChk -->|"No"| ValidateTurn["validate_agent_results() -> Re-read fresh shared state<br/>-> append_run_log(success) -> update_workflow_status('completed')"]
+
+    ValidateTurn --> ModeSynth{"selected_mode?"}
+    ModeSynth -->|"offline"| DetReply["Compile Grounded Deterministic Response<br/>(DATA_ONLY_BANNER active)"]
+    ModeSynth -->|"gemini or groq"| CloudCall["AIProviderManager.route_chat_request()<br/>Check CircuitBreaker -> _wrap_live_maf_client()<br/>Single Grounded Synthesis Call to Selected Provider"]
+
+    CloudCall --> CloudOK{"HTTP 200 OK?"}
+    CloudOK -->|"Yes"| RecordOK["breaker.record_success()<br/>health.record_success(provider)"]
+    CloudOK -->|"No (4xx/5xx/Timeout)"| ClassifyErr["classify_provider_failure()<br/>Evaluate RetryPolicy & CircuitBreaker<br/>(Never cross-route to other provider or Offline)"]
+    ClassifyErr --> ShouldRetry{"should_retry &<br/>!circuit_open & !cancelled?"}
+    ShouldRetry -->|"Yes"| Backoff["Sleep backoff + jitter"] --> CloudCall
+    ShouldRetry -->|"No"| RaiseUnavail["Raise ProviderUnavailableError<br/>(Mode remains pinned to selected_mode)"]
+
+    FastQuery & FastRemove & FastLog & PoliteReply & AbortTurn & DetReply & RecordOK & RaiseUnavail --> PostTurn["Compare _state_analytics_sig()<br/>If state changed -> _bump_data_version(user_id)<br/>If request_id -> op_store.complete()"]
+    PostTurn --> ReturnHTTP(["Return JSON Response + Security Headers<br/>(200 OK / 400 Invalid / 503 Provider Error / 504 Timeout)"])

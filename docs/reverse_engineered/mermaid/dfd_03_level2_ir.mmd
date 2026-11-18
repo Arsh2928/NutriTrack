@@ -1,0 +1,49 @@
+---
+title: "DFD Level 2 — Information Retrieval (IR), Lexical/Fuzzy Matching & Recommendation Scoring Pipeline"
+---
+flowchart TB
+    RawInput(["🔤 User Free-Text Utterance / Quick-Add Input<br/>e.g. 'Add 100 g paneer and 2 boiled eggs yesterday'"])
+
+    subgraph Stage1["Stage 1: Temporal & Phrase Segmentation (core/quantity.py)"]
+        DateExt["1.1 extract_date_from_text()<br/>ISO YYYY-MM-DD, Slash DD/MM/YYYY, 'today'/'yesterday'<br/>Validates calendar date & max 400-day backdate"]
+        MealSplit["1.2 split_meal_text_with_meta()<br/>Extracts meal_type (breakfast/lunch/dinner/snack)<br/>Splits on ',', ';', 'and', 'with', '+', '&', 'plus'"]
+        QtyParse["1.3 parse_item_text()<br/>Parses leading numbers, fractions ('1 1/2'), number words ('two'),<br/>attached units ('100g'), '2 x eggs', & plausibility bounds<br/>(MAX_COUNT=50, MAX_AMOUNT=5000g/ml)"]
+    end
+
+    subgraph Stage2["Stage 2: Scoped Vocabulary & Lexical/Fuzzy IR (ca1/food_database.py)"]
+        ScopeDB["2.1 get_food_db(user_id)<br/>Merges _BUILTIN_DB + _load_user_custom_entries(user_id)<br/>with mtime/size stat-signature cache"]
+        NegGuard["2.2 _NOT_SAME_AS Negative Phrase Guard<br/>Blocks distinct foods ('paneer tikka', 'protein bar',<br/>'almond milk', 'fried rice', 'egg roll', etc.)"]
+        ExactVocab["2.3 Build exact_vocab Set<br/>All tokens across all keys & aliases in scoped DB"]
+        TokenMatch["2.4 _matched_query_word() & Alias Scoring<br/>• Exact token match first<br/>• Typo-tolerant SequenceMatcher >= 0.80 for len >= 4 & same 1st char<br/>• Anti-hijack guard: exact_vocab tokens NEVER fuzzy-remap<br/>• Ranked by score = (len(alias_words), len(alias_string))"]
+        LeftoverChk["2.5 Leftover Token & Confidence Verification<br/>leftover_words = qwords - best_matched - FILLER_WORDS - digits<br/>If leftover_words != [] -> low_confidence_match (refuses guess)"]
+        DidYouMean["2.6 did_you_mean(limit=3)<br/>difflib.get_close_matches(cutoff=0.60) over aliases<br/>Returned as user suggestion only, NEVER auto-applied"]
+    end
+
+    subgraph Stage3["Stage 3: Tiered External Public API IR (core/external_nutrition.py)"]
+        ExtGate["3.1 external_enabled() & assert_network_allowed()<br/>Requires NUTRITRACK_ONLINE_LOOKUP=1 & mode != 'offline'"]
+        SingleFlight["3.2 In-Memory LRU Cache (_CACHE, 500) + _IN_FLIGHT Event Dedup<br/>+ Thread-Local 4.0s Deadline Budget"]
+        USDA["3.3 Tier 1: USDA FoodData Central (/fdc/v1/foods/search)<br/>Foundation & SR Legacy • _name_matches() all query words<br/>Extracts nutrients (208/957/958 kcal, 203 P, 205 C, 204 F, 291 fiber)<br/>+ foodMeasures / foodPortions household weights"]
+        OFF["3.4 Tier 2: Open Food Facts (v2 Search + CGI Fallback)<br/>Rejects _DERIVATIVE_MODIFIERS (oil, spray, syrup, supplement)<br/>Picks candidate minimizing extra_words = cand_words - q_words"]
+    end
+
+    subgraph Stage4["Stage 4: Unit Coercion & Nutrient Scaling (core/nutrition.py)"]
+        Coerce["4.1 coerce_diary_portion() & _convert()<br/>Maps household portions (cup=240ml, tbsp=15ml, tsp=5ml, bowl=200g)<br/>or food-specific portions{} to native unit (g, ml, piece, slice, scoop)"]
+        Scale["4.2 Linear Scaling & Provenance Tagging<br/>scale = effective_amount / base_amount<br/>Computes rounded kcal, protein, carbs, fat, fiber + provenance"]
+    end
+
+    subgraph Stage5["Stage 5: Candidate Retrieval & Multi-Objective Ranking (tools/recommendation_tools.py)"]
+        RoleGen["5.1 _options_by_role() & TEMPLATES Cartesian Product<br/>Filters DB by diet (any/veg/egg) & avoid list<br/>Evaluates portion LADDERS across 12 role templates within [min_kcal, rc]"]
+        ScoreRank["5.2 Multi-Objective Scoring Function _score()<br/>score = 0.50*protein_score + 0.25*calorie_fill + 0.15*variety + 0.10*preference<br/>Diversifies via _diverse(MAX_PER_MAIN_FOOD=4) + reserves MAX_OWN_FOODS=5"]
+        Revalidate["5.3 validate_recommendation_fit()<br/>Recomputes candidate nutrition from scratch & verifies <= remaining_calories"]
+    end
+
+    RawInput --> DateExt --> MealSplit --> QtyParse
+    QtyParse --> ScopeDB --> NegGuard --> ExactVocab --> TokenMatch --> LeftoverChk
+    LeftoverChk -->|"key == None"| DidYouMean
+    LeftoverChk -.->|"key == None or leftover_words"| ExtGate
+    ExtGate --> SingleFlight --> USDA
+    USDA -->|"Miss"| OFF
+    LeftoverChk -->|"Exact / High-Confidence Match"| Coerce
+    USDA & OFF -->|"Normalized per-100g Entry"| Coerce
+    Coerce --> Scale
+    ScopeDB --> RoleGen --> ScoreRank --> Revalidate

@@ -1,0 +1,28 @@
+---
+title: "DFD Level 0 — NutriTrack Context Diagram"
+---
+flowchart LR
+    User(["👤 End User<br/>(Browser UI / REST Client)"])
+    Gemini(["☁️ Google Gemini API<br/>(v1beta/openai • gemini-flash-lite-latest)"])
+    Groq(["☁️ Groq Cloud API<br/>(openai/v1 • openai/gpt-oss-120b)"])
+    ExtFood(["🌐 Public Nutrition APIs<br/>(USDA FoodData Central & Open Food Facts)<br/>Opt-in: NUTRITRACK_ONLINE_LOOKUP=1"])
+
+    subgraph NutriTrack["NutriTrack Multi-Agent Personal Nutrition System (Flask + MAF + Local IR Engine)"]
+        Core["NutriTrack Application Server<br/>• Auth, CSRF & Rate-Limit Gate<br/>• Durable Idempotency Store<br/>• Fast Deterministic Router<br/>• 5-Agent MAF Orchestrator<br/>• Multi-Stage Food IR Engine"]
+    end
+
+    Disk[("💾 Local Atomic JSON & JSONL Stores<br/>(users/, profiles/, custom_foods/,<br/>operations/, auth/, logs/)")]
+
+    User -- "Natural-Language Chat, Meal Diary CRUD,<br/>Custom Foods, Water, Goals, AI Mode, Auth" --> Core
+    Core -- "Grounded Nutrition Totals, 7-Day Trends,<br/>Validated Meal Recommendations, AI Status" --> User
+
+    Core -- "Single Grounded Synthesis / Tool Prompt<br/>(Strictly when selected_mode == 'gemini')" --> Gemini
+    Gemini -- "Chat Completion Response" --> Core
+
+    Core -- "Single Grounded Synthesis / Tool Prompt<br/>(Strictly when selected_mode == 'groq')" --> Groq
+    Groq -- "Chat Completion Response" --> Core
+
+    Core -. "Per-100g Nutrition Query<br/>(Blocked in Offline Mode)" .-> ExtFood
+    ExtFood -. "Normalized Nutrients & Portions<br/>(Provenance Tagged, Never Auto-Saved)" .-> Core
+
+    Core <-->|"Cross-Process File Locks (.lock)<br/>+ Atomic Temp-File Rename"| Disk

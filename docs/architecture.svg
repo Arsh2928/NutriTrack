@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 760" width="1180" height="760" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399" />
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fbbf24" />
+    </marker>
+  </defs>
+
+  <rect width="1180" height="760" fill="#0b1220" rx="14" />
+  <text x="590" y="38" fill="#e6edf7" font-size="22" font-weight="700" text-anchor="middle">NutriTrack — Manager-Worker Multi-Agent Architecture (Microsoft Agent Framework)</text>
+  <text x="590" y="60" fill="#93a3be" font-size="13" text-anchor="middle">Selective Manager-Worker Delegation · Strict 3-Mode AI (Gemini | Groq | Offline) · Shared NutritionState</text>
+
+  <!-- User & Interface Layer -->
+  <rect x="40" y="90" width="210" height="84" rx="10" fill="#121b2e" stroke="#38bdf8" stroke-width="1.5" />
+  <text x="145" y="118" fill="#38bdf8" font-size="14" font-weight="700" text-anchor="middle">User Request</text>
+  <text x="145" y="138" fill="#e6edf7" font-size="12" text-anchor="middle">Flask UI / REST API</text>
+  <text x="145" y="156" fill="#93a3be" font-size="11" text-anchor="middle">Jupyter Demo / CLI</text>
+
+  <!-- Nutrition Manager Agent -->
+  <rect x="335" y="82" width="510" height="106" rx="12" fill="#18233a" stroke="#38bdf8" stroke-width="2" />
+  <text x="590" y="109" fill="#38bdf8" font-size="16" font-weight="700" text-anchor="middle">Agent 5: Nutrition Manager Agent (MAF Coordinator)</text>
+  <text x="590" y="130" fill="#e6edf7" font-size="12" text-anchor="middle">Plans minimal specialist delegation · Validates agent results · Handles failures · Compiles reply</text>
+  <text x="590" y="151" fill="#93a3be" font-size="11" text-anchor="middle">Tools: read_shared_state · delegate_to_specialist · validate_agent_results · update_workflow_status · append_run_log</text>
+  <text x="590" y="170" fill="#a78bfa" font-size="11" text-anchor="middle">AIProviderManager: Strict Mode Isolation (Gemini Only | Groq Only | Deterministic Offline · No Cross-Fallback)</text>
+
+  <!-- Final Output -->
+  <rect x="930" y="90" width="210" height="84" rx="10" fill="#121b2e" stroke="#34d399" stroke-width="1.5" />
+  <text x="1035" y="118" fill="#34d399" font-size="14" font-weight="700" text-anchor="middle">Validated Output</text>
+  <text x="1035" y="138" fill="#e6edf7" font-size="12" text-anchor="middle">Grounded Response</text>
+  <text x="1035" y="156" fill="#93a3be" font-size="11" text-anchor="middle">Insights, Charts &amp; Trace</text>
+
+  <line x1="250" y1="132" x2="333" y2="132" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)" />
+  <line x1="845" y1="132" x2="928" y2="132" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)" />
+
+  <!-- Four Specialist Worker Agents -->
+  <!-- Agent 1 -->
+  <rect x="40" y="255" width="255" height="162" rx="10" fill="#121b2e" stroke="#34d399" stroke-width="1.5" />
+  <text x="167" y="281" fill="#34d399" font-size="14" font-weight="700" text-anchor="middle">Agent 1: Meal Intake Agent</text>
+  <text x="167" y="300" fill="#93a3be" font-size="11" text-anchor="middle">meal_intake_agent.py</text>
+  <text x="56" y="325" fill="#e6edf7" font-size="11.5">• parse_meal_entry()</text>
+  <text x="56" y="343" fill="#e6edf7" font-size="11.5">• lookup_food_nutrition()</text>
+  <text x="56" y="361" fill="#e6edf7" font-size="11.5">• add_meal_to_state()</text>
+  <text x="56" y="379" fill="#e6edf7" font-size="11.5">• remove_meal_from_state()</text>
+  <text x="56" y="397" fill="#e6edf7" font-size="11.5">• register_custom_food()</text>
+
+  <!-- Agent 2 -->
+  <rect x="322" y="255" width="255" height="162" rx="10" fill="#121b2e" stroke="#34d399" stroke-width="1.5" />
+  <text x="449" y="281" fill="#34d399" font-size="14" font-weight="700" text-anchor="middle">Agent 2: Nutrition Analysis</text>
+  <text x="449" y="300" fill="#93a3be" font-size="11" text-anchor="middle">nutrition_analysis_agent.py</text>
+  <text x="338" y="325" fill="#e6edf7" font-size="11.5">• calculate_daily_totals()</text>
+  <text x="338" y="345" fill="#e6edf7" font-size="11.5">• calculate_macro_split()</text>
+  <text x="338" y="365" fill="#e6edf7" font-size="11.5">• get_weekly_trends()</text>
+  <text x="338" y="385" fill="#e6edf7" font-size="11.5">• compare_intake_with_targets()</text>
+
+  <!-- Agent 3 -->
+  <rect x="603" y="255" width="255" height="162" rx="10" fill="#121b2e" stroke="#34d399" stroke-width="1.5" />
+  <text x="730" y="281" fill="#34d399" font-size="14" font-weight="700" text-anchor="middle">Agent 3: Goal &amp; Budget</text>
+  <text x="730" y="300" fill="#93a3be" font-size="11" text-anchor="middle">goal_budget_agent.py</text>
+  <text x="619" y="325" fill="#e6edf7" font-size="11.5">• set_calorie_target()</text>
+  <text x="619" y="345" fill="#e6edf7" font-size="11.5">• set_protein_target()</text>
+  <text x="619" y="365" fill="#e6edf7" font-size="11.5">• calculate_remaining_targets()</text>
+  <text x="619" y="385" fill="#e6edf7" font-size="11.5">• check_meal_against_budget()</text>
+
+  <!-- Agent 4 -->
+  <rect x="885" y="255" width="255" height="162" rx="10" fill="#121b2e" stroke="#34d399" stroke-width="1.5" />
+  <text x="1012" y="281" fill="#34d399" font-size="14" font-weight="700" text-anchor="middle">Agent 4: Meal Recommendation</text>
+  <text x="1012" y="300" fill="#93a3be" font-size="11" text-anchor="middle">meal_recommendation_agent.py</text>
+  <text x="901" y="325" fill="#e6edf7" font-size="11.5">• get_recommendation_candidates()</text>
+  <text x="901" y="345" fill="#e6edf7" font-size="11.5">• estimate_meal_nutrition()</text>
+  <text x="901" y="365" fill="#e6edf7" font-size="11.5">• rank_meal_candidates()</text>
+  <text x="901" y="385" fill="#e6edf7" font-size="11.5">• validate_recommendation_fit()</text>
+
+  <!-- Delegation arrows from Manager to Workers -->
+  <line x1="420" y1="188" x2="175" y2="253" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrow)" />
+  <line x1="510" y1="188" x2="452" y2="253" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrow)" />
+  <line x1="670" y1="188" x2="728" y2="253" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrow)" />
+  <line x1="760" y1="188" x2="1005" y2="253" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#arrow)" />
+
+  <!-- Shared NutritionState -->
+  <rect x="190" y="485" width="800" height="102" rx="12" fill="#18233a" stroke="#fbbf24" stroke-width="2" />
+  <text x="590" y="513" fill="#fbbf24" font-size="16" font-weight="700" text-anchor="middle">Shared NutritionState (nutritrack/state/nutrition_state.py · StateManager)</text>
+  <text x="590" y="537" fill="#e6edf7" font-size="12" text-anchor="middle">user_id · date · targets (calories, protein) · consumed (calories, protein, carbs, fat) · remaining</text>
+  <text x="590" y="557" fill="#e6edf7" font-size="12" text-anchor="middle">meals (deduplicated) · preferences · weekly_history · recommendations · agent_results · open_questions · workflow_status</text>
+  <text x="590" y="576" fill="#93a3be" font-size="11" text-anchor="middle">Controlled state-management reads/writes via bound @agent_tool context (zero LLM arithmetic)</text>
+
+  <!-- Worker <-> Shared State arrows -->
+  <line x1="167" y1="417" x2="310" y2="483" stroke="#fbbf24" stroke-width="1.6" marker-end="url(#arrow-amber)" />
+  <line x1="449" y1="417" x2="480" y2="483" stroke="#fbbf24" stroke-width="1.6" marker-end="url(#arrow-amber)" />
+  <line x1="730" y1="417" x2="700" y2="483" stroke="#fbbf24" stroke-width="1.6" marker-end="url(#arrow-amber)" />
+  <line x1="1012" y1="417" x2="870" y2="483" stroke="#fbbf24" stroke-width="1.6" marker-end="url(#arrow-amber)" />
+
+  <!-- Bottom Storage & Dataset Layer -->
+  <rect x="40" y="640" width="340" height="84" rx="10" fill="#121b2e" stroke="#253352" stroke-width="1.5" />
+  <text x="210" y="667" fill="#e6edf7" font-size="13.5" font-weight="700" text-anchor="middle">Local Food Nutrition Database</text>
+  <text x="210" y="688" fill="#93a3be" font-size="11.5" text-anchor="middle">nutritrack/ca1/food_database.py</text>
+  <text x="210" y="706" fill="#93a3be" font-size="11.5" text-anchor="middle">+ User custom_foods.json + Safe quantity parser</text>
+
+  <rect x="420" y="640" width="340" height="84" rx="10" fill="#121b2e" stroke="#253352" stroke-width="1.5" />
+  <text x="590" y="667" fill="#e6edf7" font-size="13.5" font-weight="700" text-anchor="middle">Persistent Per-User State</text>
+  <text x="590" y="688" fill="#93a3be" font-size="11.5" text-anchor="middle">data/users/&lt;user_id&gt;.json (Atomic JSON writes)</text>
+  <text x="590" y="706" fill="#93a3be" font-size="11.5" text-anchor="middle">+ One-time CA1 daily_log.json migration</text>
+
+  <rect x="800" y="640" width="340" height="84" rx="10" fill="#121b2e" stroke="#253352" stroke-width="1.5" />
+  <text x="970" y="667" fill="#e6edf7" font-size="13.5" font-weight="700" text-anchor="middle">Append-Only Execution Trace</text>
+  <text x="970" y="688" fill="#93a3be" font-size="11.5" text-anchor="middle">logs/agent_runs.jsonl + ai_provider_events.jsonl</text>
+  <text x="970" y="706" fill="#93a3be" font-size="11.5" text-anchor="middle">Redacts API keys &amp; URL tokens · Tool trace</text>
+
+  <line x1="360" y1="587" x2="250" y2="638" stroke="#93a3be" stroke-width="1.5" />
+  <line x1="590" y1="587" x2="590" y2="638" stroke="#93a3be" stroke-width="1.5" />
+  <line x1="820" y1="587" x2="930" y2="638" stroke="#93a3be" stroke-width="1.5" />
+</svg>

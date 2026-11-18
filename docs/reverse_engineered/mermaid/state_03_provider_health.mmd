@@ -1,0 +1,45 @@
+---
+title: "State 3 - Provider health status (ai/provider_health.py) and UI label"
+---
+stateDiagram-v2
+    [*] --> disabled_offline : selected mode is offline
+    [*] --> unconfigured : API key missing
+    [*] --> config_error : configured model not supported
+    [*] --> available : key present and model supported
+    disabled_offline --> available : mode switched to gemini or groq and key present
+    unconfigured --> available : key configured, sync_with_config
+    available --> healthy : record_success
+    healthy --> healthy : record_success
+    available --> failing : record_failure
+    healthy --> failing : record_failure
+    failing --> healthy : record_success (chat call or Retry Connection probe)
+    failing --> available : mode config re-synced
+
+    state failing {
+        rate_limited
+        quota_exhausted
+        unreachable
+        server_error
+        circuit_open
+        degraded
+        config_error_runtime
+    }
+
+    note right of failing
+        Chosen by record_failure:
+        config error (401, 403, 404) -> config_error
+        daily quota 429 -> quota_exhausted
+        temporary 429 -> rate_limited
+        network or timeout -> unreachable
+        5xx -> server_error
+        breaker opened -> circuit_open
+        anything else -> degraded
+    end note
+
+    note left of healthy
+        UI label: healthy = Gemini or Groq Connected,
+        available = Ready, failing = Unavailable,
+        quota_exhausted = Quota Exhausted,
+        config_error = Configuration Error,
+        offline = Offline Mode Active.
+    end note

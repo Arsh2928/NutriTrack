@@ -1,0 +1,35 @@
+---
+title: "State 7 - Browser client (web/static/index.html)"
+---
+stateDiagram-v2
+    [*] --> Booting : page load
+    Booting --> AuthGate : /auth/me reports auth required and not signed in
+    Booting --> App : no auth needed or session valid, state loaded
+    AuthGate --> App : register or login succeeds
+    App --> AuthGate : logout, localStorage caches cleared
+
+    state App {
+        [*] --> dashboard
+        dashboard --> food_diary : sidebar or hash
+        food_diary --> recommendations : sidebar or hash
+        recommendations --> weekly_progress : sidebar or hash
+        weekly_progress --> agents : sidebar or hash
+        agents --> settings : sidebar or hash
+        settings --> dashboard : sidebar or hash
+        --
+        [*] --> ChatIdle
+        ChatIdle --> ChatIdle : empty or whitespace, toast Input Needed
+        ChatIdle --> ChatInFlight : submit, buttons disabled, 25 s abort timer
+        ChatInFlight --> ChatDone : 200 success, input cleared, state refreshed
+        ChatInFlight --> ChatNeedsInput : 200 needs_input, input kept, partial saves refreshed
+        ChatInFlight --> ChatFailed : 4xx, 5xx or abort, input kept, mode kept
+        ChatDone --> ChatIdle
+        ChatNeedsInput --> ChatIdle
+        ChatFailed --> ChatIdle
+    }
+
+    note right of App
+        Any screen can be opened from the sidebar, the URL hash,
+        or browser back and forward. Screens are shown in a ring
+        only to keep the diagram readable.
+    end note

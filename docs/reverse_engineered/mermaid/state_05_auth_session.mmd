@@ -1,0 +1,20 @@
+---
+title: "State 5 - Access and session state (web/auth.py, _authorize_request)"
+---
+stateDiagram-v2
+    [*] --> LocalOpen : no accounts and loopback host
+    [*] --> Anonymous : auth enforced (non-loopback host, REQUIRE_AUTH, or accounts exist)
+    LocalOpen --> Authenticated : first account registered
+    Anonymous --> Authenticated : register 201 or login 200, signed session cookie plus CSRF token
+    Anonymous --> Anonymous : wrong password, 401 and failure recorded
+    Anonymous --> RateLimited : 5 failures per user or 25 per IP within 60 s, 429
+    RateLimited --> Anonymous : 60 s window slides past oldest failure
+    Authenticated --> Authenticated : mutating call with matching X-CSRF-Token
+    Authenticated --> Anonymous : logout, session revoked, local cache cleared
+    Authenticated --> Anonymous : session older than 24 h, pruned by verify_session
+
+    note right of Authenticated
+        A POST, PUT or DELETE without the right CSRF header
+        gets 403 csrf_failed and the state is unchanged.
+        A request for another user_id gets 403 forbidden.
+    end note

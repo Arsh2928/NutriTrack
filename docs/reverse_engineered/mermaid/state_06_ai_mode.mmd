@@ -1,0 +1,24 @@
+---
+title: "State 6 - Selected AI mode (ai/config.py, ai/provider_manager.py)"
+---
+stateDiagram-v2
+    [*] --> offline : default when nothing is saved or configured
+    [*] --> gemini : saved mode or NUTRITRACK_AI_MODE says gemini
+    [*] --> groq : saved mode or NUTRITRACK_AI_MODE says groq
+    offline --> gemini : POST /ai/mode gemini, persisted
+    offline --> groq : POST /ai/mode groq, persisted
+    gemini --> offline : POST /ai/mode offline, persisted
+    gemini --> groq : POST /ai/mode groq, persisted
+    groq --> offline : POST /ai/mode offline, persisted
+    groq --> gemini : POST /ai/mode gemini, persisted
+    gemini --> gemini : provider failure keeps the mode, no fallback
+    groq --> groq : provider failure keeps the mode, no fallback
+    offline --> offline : no network call is ever made
+
+    note right of offline
+        Priority when starting: ai_mode_settings.json,
+        then NUTRITRACK_AI_MODE, then offline.
+        Only gemini, groq and offline are valid.
+        automatic, online, github and openai are
+        rejected with HTTP 400.
+    end note

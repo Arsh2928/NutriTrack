@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.venv*/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+.ipynb_checkpoints/
+*.zip
+# runtime user data (keep the folder, not the contents)
+data/*
+!data/.gitkeep
+# NOTE: logs/agent_runs.jsonl is a CA2 deliverable -- deliberately NOT ignored
+logs/*.corrupt-*

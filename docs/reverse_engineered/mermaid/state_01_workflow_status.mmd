@@ -1,0 +1,27 @@
+---
+title: "State 1 - Agent workflow status (NutritionState runtime.workflow_status)"
+---
+stateDiagram-v2
+    direction LR
+    [*] --> idle : NutritionState created or restarted
+    idle --> planning : manager calls update_workflow_status planning
+    planning --> delegating : delegate_to_specialist
+    delegating --> delegating : next specialist in causal order
+    delegating --> validating : all planned specialists done, validate_agent_results
+    validating --> compiling : fresh read_shared_state, append_run_log
+    compiling --> completed : update_workflow_status completed
+    planning --> completed : non-food request answered politely
+    planning --> failed : manager step raised
+    delegating --> failed : a specialist failed, for example llm_unavailable
+    completed --> idle : reset_run_data at start of next run_turn
+    failed --> idle : reset_run_data at start of next run_turn
+
+    note right of delegating
+        WORKFLOW_STATUSES = idle, planning, delegating,
+        validating, compiling, completed, failed.
+        set_workflow_status does not enforce a transition
+        table. The offline manager only writes planning,
+        completed and failed. Turn result is derived:
+        failed if workflow or a specialist failed,
+        needs_input if open questions exist, else success.
+    end note

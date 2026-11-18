@@ -1,0 +1,74 @@
+---
+title: "DFD Level 1 — Full System Data Flow Across Processes & Data Stores"
+---
+flowchart TB
+    User(["👤 User (Browser SPA)"])
+
+    subgraph P1_Auth["P1: Security, Auth & Idempotency Gate (web/auth.py, state/operations.py)"]
+        AuthCheck["1.1 _authorize_request()<br/>Cookie/Bearer HMAC + CSRF + IDOR + Rate Limit"]
+        IdemGate["1.2 DurableOperationStore.begin()<br/>SHA-256 payload_hash & 90s PID Lease"]
+    end
+
+    subgraph P2_Router["P2: Fast Deterministic Router (tools/fast_log.py)"]
+        FastRoute["2.1 route_chat_fast()<br/>Regex Intent & Complexity Classifier"]
+        FastExec["2.2 Fast Handlers<br/>fast_log_meal / fast_remove_meal /<br/>_fast_daily / _fast_weekly / _fast_history / _fast_remaining"]
+    end
+
+    subgraph P3_MAF["P3: 5-Agent MAF Orchestrator (agents/nutrition_manager_agent.py, runtime.py)"]
+        Mgr["3.1 Nutrition Manager Agent<br/>plan_specialists_for_request() & Causal Delegation"]
+        SpecIntake["3.2 Meal Intake Agent<br/>(parse, lookup, add/remove, custom food)"]
+        SpecAnalysis["3.3 Nutrition Analysis Agent<br/>(daily totals, macro split, 7-day & week-over-week)"]
+        SpecBudget["3.4 Goal & Budget Agent<br/>(set targets, remaining budget, meal fit check)"]
+        SpecRec["3.5 Meal Recommendation Agent<br/>(candidates -> estimate -> rank -> validate_fit)"]
+    end
+
+    subgraph P4_AI["P4: Strict 3-Mode AI Provider Router (ai/provider_manager.py, provider_factory.py)"]
+        ModeGuard["4.1 ai_mode_scope & assert_network_allowed()<br/>Strict Mode: gemini | groq | offline"]
+        CB["4.2 CircuitBreaker + RetryPolicy<br/>+ _wrap_live_maf_client() Grounded Synthesis"]
+    end
+
+    subgraph P5_IR["P5: Information Retrieval & Nutrition Resolution Engine (ca1/food_database.py, core/)"]
+        IREngine["5.1 Temporal/Qty Parser -> Alias & Fuzzy Matcher<br/>-> Unit Coercion -> Opt-In External API Lookup"]
+    end
+
+    D1[("D1: Auth Store<br/>data/auth/{users,sessions,rate_limits}.json")]
+    D2[("D2: Durable Operations<br/>data/operations/<user_id>.json")]
+    D3[("D3: Shared NutritionState<br/>data/users/<user_id>.json")]
+    D4[("D4: User Profiles & Water<br/>data/profiles/<user_id>.json")]
+    D5[("D5: Built-in & Custom Food DB<br/>_BUILTIN_DB + data/custom_foods/<user_id>.json")]
+    D6[("D6: Audit & Provider Logs<br/>logs/{agent_runs,ai_provider_events}.jsonl")]
+    D7[("D7: Versioned Insights Cache<br/>_insights_cache (LRU 128)")]
+
+    CloudLLM(["☁️ Gemini / Groq API"])
+    PublicAPI(["🌐 USDA FDC / Open Food Facts"])
+
+    User -->|"HTTP Request + X-CSRF-Token + request_id"| AuthCheck
+    AuthCheck <-->|"Verify / Record"| D1
+    AuthCheck -->|"Authorized user_id"| IdemGate
+    IdemGate <-->|"Lease / Replay"| D2
+
+    IdemGate -->|"Execute Turn"| FastRoute
+    FastRoute -->|"Simple Log / Remove / Summary"| FastExec
+    FastRoute -->|"Complex / Goal / Recommendation / '?' "| Mgr
+
+    FastExec -->|"Resolve Foods"| IREngine
+    FastExec <-->|"Read / Mutate Txn"| D3
+    FastExec -->|"Append Trace"| D6
+
+    Mgr -->|"Delegate Task"| SpecIntake & SpecAnalysis & SpecBudget & SpecRec
+    SpecIntake -->|"Lookup / Register"| IREngine
+    SpecRec -->|"Role Ladders & Recalculate"| IREngine
+    SpecIntake & SpecAnalysis & SpecBudget & SpecRec <-->|"Read / Write Shared State"| D3
+    Mgr <-->|"Validate Results & Workflow Status"| D3
+    Mgr <-->|"Route LLM Step"| ModeGuard
+    ModeGuard --> CB
+    CB <-->|"HTTPS (Only Selected Mode)"| CloudLLM
+    CB -->|"Provider Events"| D6
+    Mgr -->|"Append Run Log"| D6
+
+    IREngine <-->|"Merged Built-in + Private Custom Foods"| D5
+    IREngine -.->|"Opt-in Online Lookup (Non-Offline)"| PublicAPI
+
+    D3 & D4 -->|"state_sig + prof_sig + data_version"| D7
+    D7 -->|"JSON Response"| User
+    IdemGate -->|"Complete & Return JSON"| User

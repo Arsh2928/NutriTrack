@@ -1,0 +1,219 @@
+---
+title: "NutriTrack — Reverse-Engineered Entity-Relationship (ER) Diagram"
+---
+erDiagram
+    AUTH_USER ||--o{ AUTH_SESSION : "authenticates (sessions.json)"
+    AUTH_USER ||--o{ LOGIN_RATE_BUCKET : "rate-limited by (rate_limits.json)"
+    AUTH_USER ||--|| USER_PROFILE : "owns profile (profiles/user_id.json)"
+    AUTH_USER ||--|| NUTRITION_STATE : "owns state (users/user_id.json)"
+    AUTH_USER ||--o{ CUSTOM_FOOD : "defines private (custom_foods/user_id.json)"
+    AUTH_USER ||--o{ DURABLE_OPERATION : "tracks idempotency (operations/user_id.json)"
+    AUTH_USER ||--o{ RUN_LOG_ENTRY : "audits execution (logs/agent_runs.jsonl)"
+
+    USER_PROFILE ||--o{ WATER_LOG_ENTRY : "records daily water_logs[date]"
+    NUTRITION_STATE ||--o{ DAY_RECORD : "stores days[YYYY-MM-DD]"
+    NUTRITION_STATE ||--o{ REQUEST_ID_RECORD : "deduplicates request_ids[rid]"
+    NUTRITION_STATE ||--o{ SAVED_RECOMMENDATION : "persists recommendations[]"
+    NUTRITION_STATE ||--o{ CANDIDATE_POOL_ITEM : "ephemeral pool.candidates[cid]"
+
+    DAY_RECORD ||--|{ MEAL_ENTRY : "contains meals[] (min 1 meal per stored day)"
+    REQUEST_ID_RECORD }o--|{ MEAL_ENTRY : "references meal_ids[] and batch_id"
+    BUILTIN_FOOD ||--o{ FOOD_PORTION : "defines household portions{}"
+    CUSTOM_FOOD ||--o{ FOOD_PORTION : "defines household portions{}"
+    BUILTIN_FOOD ||--o{ MEAL_ENTRY : "resolved into (provenance: ca1_recovered / reference_reconstructed)"
+    CUSTOM_FOOD ||--o{ MEAL_ENTRY : "resolved into (provenance: user_defined)"
+    EXTERNAL_CACHE_ENTRY ||--o{ MEAL_ENTRY : "opt-in resolve (provenance: usda_fdc / open_food_facts)"
+    SAVED_RECOMMENDATION ||--|{ RECOMMENDATION_ITEM : "comprises items[]"
+
+    AUTH_USER {
+        string user_id PK "Regex [A-Za-z0-9_-]{1,64}"
+        string salt "16-byte hex random salt"
+        string pw_hash "PBKDF2-HMAC-SHA256 (120000 iters)"
+        float created_at "Unix epoch timestamp"
+    }
+
+    AUTH_SESSION {
+        string sid PK "24-byte URL-safe token signed via HMAC-SHA256"
+        string user_id FK "Owner user_id"
+        string csrf_token "24-byte token checked via X-CSRF-Token"
+        float created_at "Unix epoch timestamp"
+        float expires_at "TTL 86400s (24 hours)"
+    }
+
+    LOGIN_RATE_BUCKET {
+        string bucket_key PK "u:client_ip:user_id or ip:client_ip"
+        list timestamps "Sliding 60s window (max 5/user, 25/IP)"
+    }
+
+    USER_PROFILE {
+        string user_id PK "data/profiles/user_id.json"
+        string name "Display name"
+        string email "Optional validated email"
+        string role "Member or Premium Member"
+        float weight_kg "Bounds 20.0..400.0"
+        float target_weight_kg "Bounds 20.0..400.0"
+        float height_cm "Bounds 80.0..260.0"
+        string health_goal "Goal description"
+        string meals_per_day "e.g. 3 Meals + 1 Snack"
+        float carbs_target "Bounds 1.0..1500.0 g"
+        float fat_target "Bounds 1.0..500.0 g"
+        float water_target_liters "Bounds 0.25..15.0 L"
+        boolean ai_meal_suggestions "Toggle flag"
+        boolean weekly_summary_enabled "Toggle flag"
+        list diet_types "non-vegetarian, vegetarian, eggetarian"
+    }
+
+    WATER_LOG_ENTRY {
+        string date PK "ISO YYYY-MM-DD key inside water_logs"
+        float liters "Bounds 0.0..25.0 L rounded to 2 decimals"
+    }
+
+    NUTRITION_STATE {
+        string user_id PK "data/users/user_id.json"
+        int schema_version "SCHEMA_VERSION = 1"
+        string created_at "ISO-8601 timestamp"
+        float target_calories "500.0..10000.0 kcal (or null)"
+        float target_protein "10.0..500.0 g (or null)"
+        string targets_source "user, demo_default, or ca1_import"
+        string pref_diet "any, vegetarian, or eggetarian"
+        list pref_avoid "Excluded food names (max 25)"
+        list pref_prefer "Preferred food names (max 25)"
+        string workflow_status "Ephemeral: idle..completed/failed"
+    }
+
+    DAY_RECORD {
+        string date PK "ISO YYYY-MM-DD (deleted when meals[] becomes empty)"
+        float snap_target_calories "Historical day calorie target snapshot"
+        float snap_target_protein "Historical day protein target snapshot"
+    }
+
+    MEAL_ENTRY {
+        string meal_id PK "m- + 8 hex chars"
+        string batch_id "b- + 8 hex chars"
+        string date FK "ISO YYYY-MM-DD"
+        string meal_type "breakfast, brunch, lunch, dinner, snack, or null"
+        string food "Canonical food key (1..100 chars)"
+        string quantity_str "Formatted display qty (1..60 chars)"
+        float calories "0.0..10000.0 kcal"
+        float protein "0.0..1000.0 g"
+        float carbs "0.0..2000.0 g"
+        float fat "0.0..1000.0 g"
+        float fiber "0.0..500.0 g"
+        string serving_size "Human-readable serving description"
+        string provenance "ca1_recovered, reference_reconstructed, user_defined, usda_fdc, open_food_facts"
+        boolean external "True if resolved from USDA/OFF"
+        boolean estimated "True (database/API estimation)"
+        string logged_at "ISO-8601 timestamp"
+        string source "agent, meal_intake, ui, or ca1_import"
+        string request_id "Optional idempotency key"
+    }
+
+    REQUEST_ID_RECORD {
+        string request_id PK "Max 500 FIFO entries in state"
+        string batch_id "Associated batch_id"
+        string date "Logged ISO date"
+        list meal_ids "List of created meal_ids"
+        string at "ISO-8601 timestamp"
+    }
+
+    BUILTIN_FOOD {
+        string canonical_name PK "Built-in _BUILTIN_DB key"
+        list aliases "Synonym/alias strings for IR matching"
+        string unit "Native unit: g, ml, piece, slice, scoop"
+        float base_amount "Reference amount (100g, 100ml, or 1 unit)"
+        string serving_size "Human-readable serving"
+        float calories_per_unit "kcal per base_amount"
+        float protein "g per base_amount"
+        float carbs "g per base_amount"
+        float fat "g per base_amount"
+        float fiber "g per base_amount"
+        string provenance "ca1_recovered or reference_reconstructed"
+        boolean custom "Always false"
+    }
+
+    CUSTOM_FOOD {
+        string canonical_name PK "normalise_name(name) per user_id"
+        string user_id FK "Scoped to custom_foods/user_id.json"
+        list aliases "Default [canonical_name]"
+        string unit "g, ml, piece, slice, scoop, serving"
+        float base_amount "Reference base amount"
+        string serving_size "Human-readable serving"
+        float calories_per_unit "kcal per base_amount"
+        float protein "g per base_amount"
+        float carbs "g per base_amount"
+        float fat "g per base_amount"
+        float fiber "g per base_amount"
+        string provenance "user_defined"
+        boolean custom "Always true"
+    }
+
+    FOOD_PORTION {
+        string unit_name PK "cup, bowl, tbsp, tsp, piece, slice, scoop, serving"
+        float grams_or_ml "Conversion weight/volume in base unit"
+    }
+
+    EXTERNAL_CACHE_ENTRY {
+        string normalised_query PK "In-memory LRU _CACHE (max 500)"
+        string name "Matched USDA or Open Food Facts product name"
+        float calories "kcal per 100 g"
+        float protein "g per 100 g"
+        float carbs "g per 100 g"
+        float fat "g per 100 g"
+        float fiber "g per 100 g"
+        string source "USDA FoodData Central or Open Food Facts"
+        string provenance "usda_fdc or open_food_facts"
+    }
+
+    SAVED_RECOMMENDATION {
+        string id PK "Candidate id e.g. c01"
+        string name "Composite meal title"
+        float calories "Total kcal"
+        float protein "Total protein g"
+        float carbs "Total carbs g"
+        float fat "Total fat g"
+        float score "0.50*prot + 0.25*fill + 0.15*variety + 0.10*pref"
+        string reason "Budget fit explanation"
+    }
+
+    RECOMMENDATION_ITEM {
+        string food "Canonical food key"
+        string quantity_str "Portion string"
+        float calories "Item kcal"
+        float protein "Item protein g"
+        float carbs "Item carbs g"
+        float fat "Item fat g"
+    }
+
+    CANDIDATE_POOL_ITEM {
+        string id PK "Ephemeral c01..c35 in state.pool"
+        string name "Candidate meal name"
+        list roles "Template roles e.g. protein + carb + veg"
+        dict estimate "Recomputed macro dictionary"
+        dict rank_info "Score and breakdown"
+    }
+
+    DURABLE_OPERATION {
+        string request_id PK "data/operations/user_id.json (max 200)"
+        string user_id FK "Owner user_id"
+        string endpoint "chat, meals, water"
+        string payload_hash "SHA-256 of canonical endpoint + payload"
+        string status "pending, processing, succeeded, failed"
+        int status_code "HTTP status code"
+        dict response "Cached JSON response for replay"
+        int attempts "Execution attempt counter"
+        int owner_pid "OS PID holding active lease"
+        string lease_token "UUID hex lease token"
+        float lease_expires_ts "Monotonic/epoch expiry (90s)"
+    }
+
+    RUN_LOG_ENTRY {
+        string run_id PK "logs/agent_runs.jsonl & ai_provider_events.jsonl"
+        string timestamp "ISO-8601 millisecond timestamp"
+        string user_id FK "User or system"
+        string agent "Agent name (redacted & summarized)"
+        string task "Summarized task (max 200 chars)"
+        string tool "Invoked tool name"
+        string status "success, failed, or needs_input"
+        float duration_ms "Execution latency in ms"
+        string execution_mode "fast_deterministic, data_only_deterministic, llm, system_routing"
+    }
